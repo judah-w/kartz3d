@@ -1,48 +1,72 @@
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
 import "@babylonjs/loaders/glTF";
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder, Sound } from "@babylonjs/core";
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder } from "@babylonjs/core";
+
+// enum for states
+enum State { MENU = 0, GAME = 1, LOBBY = 2 }
 
 class App {
+    private _scene: Scene;
+    private _canvas: HTMLCanvasElement;
+    private _engine: Engine;
+
+    // Scene-related
+    private _state: number = 0;
+
     constructor() {
-        // create the canvas html element and attach it to the webpage
-        const canvas = document.createElement("canvas");
-        canvas.style.width = "100%";
-        canvas.style.height = "100%";
-        canvas.id = "gameCanvas";
-        document.body.appendChild(canvas);
+        this._canvas = this._createCanvas();
 
         // initialize babylon scene and engine
-        const engine = new Engine(canvas, true);
-        const scene = new Scene(engine);
+        this._engine = new Engine(this._canvas, true);
+        this._scene = new Scene(this._engine);
 
-        const camera: ArcRotateCamera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, new Vector3(0, 0, 0));
-        camera.attachControl(canvas, true);
-        const light1: HemisphericLight = new HemisphericLight("light1", new Vector3(1, 1, 0), scene);
-        const sphere: Mesh = MeshBuilder.CreateSphere("sphere", { diameter: 1 }, scene);
+        var camera: ArcRotateCamera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, Vector3.Zero(), this._scene);
+        camera.attachControl(this._canvas, true);
+        var light1: HemisphericLight = new HemisphericLight("light1", new Vector3(1, 1, 0), this._scene);
+        var sphere: Mesh = MeshBuilder.CreateSphere("sphere", { diameter: 1 }, this._scene);
         sphere.position.y = 0.5;
         const ground: Mesh = MeshBuilder.CreateGround("ground", {width:10, height:10});
-
-        // loop menu music
-        // not working, need to add asset loader
-        //const sound: Sound = new Sound("menu", "./assets/audio/Menu.mp3", scene, null, { loop: true, autoplay: true });
 
         // hide/show the Inspector
         window.addEventListener("keydown", (ev) => {
             // Shift+Ctrl+Alt+I
             if (ev.shiftKey && ev.ctrlKey && ev.altKey && ev.keyCode === 73) {
-                if (scene.debugLayer.isVisible()) {
-                    scene.debugLayer.hide();
+                if (this._scene.debugLayer.isVisible()) {
+                    this._scene.debugLayer.hide();
                 } else {
-                    scene.debugLayer.show();
+                    this._scene.debugLayer.show();
                 }
             }
         });
 
-        // run the main render loop
-        engine.runRenderLoop(() => {
-            scene.render();
+        // main render loop
+        this._engine.runRenderLoop(() => {
+            this._scene.render();
         });
+    }
+
+    private _createCanvas(): HTMLCanvasElement {
+        document.documentElement.style["overflow"] = "hidden";
+        document.documentElement.style.overflow = "hidden";
+        document.documentElement.style.width = "100%";
+        document.documentElement.style.height = "100%";
+        document.documentElement.style.margin = "0";
+        document.documentElement.style.padding = "0";
+        document.body.style.overflow = "hidden";
+        document.body.style.width = "100%";
+        document.body.style.height = "100%";
+        document.body.style.margin = "0";
+        document.body.style.padding = "0";
+
+        //create the canvas html element and attach it to the webpage
+        this._canvas = document.createElement("canvas");
+        this._canvas.style.width = "100%";
+        this._canvas.style.height = "100%";
+        this._canvas.id = "gameCanvas";
+        document.body.appendChild(this._canvas);
+
+        return this._canvas;
     }
 }
 new App();
