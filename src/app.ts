@@ -24,9 +24,8 @@ class App {
         const ground: Mesh = MeshBuilder.CreateGround("ground", {width:10, height:10});
 
         // loop menu music
-        // not working
-        const url = URL.createObjectURL(new File("./assets/audio/Menu.mp3"))
-        const sound: Sound = new Sound("menu", url, scene, null, { loop: true, autoplay: true });
+        // not working, need to add asset loader
+        //const sound: Sound = new Sound("menu", "./assets/audio/Menu.mp3", scene, null, { loop: true, autoplay: true });
 
         // hide/show the Inspector
         window.addEventListener("keydown", (ev) => {
