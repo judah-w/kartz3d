@@ -1,7 +1,9 @@
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
 import "@babylonjs/loaders/glTF";
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder } from "@babylonjs/core";
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor } from "@babylonjs/core";
+import * as CANNON from 'cannon-es'
+
 
 // enum for states
 enum State { MENU = 0, GAME = 1, LOBBY = 2 }
@@ -21,12 +23,20 @@ class App {
         this._engine = new Engine(this._canvas, true);
         this._scene = new Scene(this._engine);
 
-        var camera: ArcRotateCamera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, Vector3.Zero(), this._scene);
+        const physicsPlugin = new CannonJSPlugin(true, 10, CANNON);
+        const gravityVector = new Vector3(0,-9.81, 0);
+        this._scene.enablePhysics(gravityVector, physicsPlugin);
+
+        const camera: ArcRotateCamera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, Vector3.Zero(), this._scene);
         camera.attachControl(this._canvas, true);
-        var light1: HemisphericLight = new HemisphericLight("light1", new Vector3(1, 1, 0), this._scene);
-        var sphere: Mesh = MeshBuilder.CreateSphere("sphere", { diameter: 1 }, this._scene);
-        sphere.position.y = 0.5;
+        const light1: HemisphericLight = new HemisphericLight("light1", new Vector3(1, 1, 0), this._scene);
+        const sphere: Mesh = MeshBuilder.CreateSphere("sphere", { diameter: 1 }, this._scene);
+        sphere.position.y = 2;
         const ground: Mesh = MeshBuilder.CreateGround("ground", {width:10, height:10});
+
+        sphere.physicsImpostor = new PhysicsImpostor(sphere, PhysicsImpostor.SphereImpostor, { mass: 1, restitution: 0.9 }, this._scene);
+        ground.physicsImpostor = new PhysicsImpostor(ground, PhysicsImpostor.BoxImpostor, { mass: 0, restitution: 0.9 }, this._scene);
+    
 
         // hide/show the Inspector
         window.addEventListener("keydown", (ev) => {
