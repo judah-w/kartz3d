@@ -42,4 +42,8 @@ class App {
 
         // run the main render loop
         engine.runRenderLoop(() => {
-      
+            scene.render();
+        });
+    }
+}
+new App();
