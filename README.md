@@ -1,3 +1,4 @@
-## Kartz 3D
+## Run the Node server
 
-Using Babylon.js
+```npm run build
+npm run start```
