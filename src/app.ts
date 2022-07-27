@@ -1,7 +1,7 @@
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
 import "@babylonjs/loaders/glTF";
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper,  } from "@babylonjs/core";
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, PhysicsEngine, ShadowGenerator, DirectionalLight,  } from "@babylonjs/core";
 import * as CANNON from 'cannon-es'
 
 
@@ -74,15 +74,22 @@ class App {
         // scene and camera
         const camera: ArcRotateCamera = new ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 15, Vector3.Zero(), scene);
         camera.attachControl(this._canvas, true);
-        const light1: HemisphericLight = new HemisphericLight("light1", new Vector3(1, 1, 0), scene);
+        const light1: DirectionalLight = new DirectionalLight("light1", new Vector3(-1, -2, -1), scene);
+        light1.position = new Vector3(20, 40, 20);
+        light1.intensity = 0.5;
 
         // objects
         const car: Mesh = MeshBuilder.CreateBox("car", {height: 1, width: 3, depth: 4 }, scene);
-        car.position.y = 4;
+        car.position.y = 2;
         const ground: Mesh = MeshBuilder.CreateGround("ground", {width:100, height:100});
 
+        // shadows
+        const shadowGenerator = new ShadowGenerator(1024, light1);
+        shadowGenerator.getShadowMap().renderList.push(car);
+        ground.receiveShadows = true;
+
         // physics properties
-        car.physicsImpostor = new PhysicsImpostor(car, PhysicsImpostor.BoxImpostor, { mass: 20, restitution: 0.9 }, scene);
+        car.physicsImpostor = new PhysicsImpostor(car, PhysicsImpostor.BoxImpostor, { mass: 5, restitution: 0.5 }, scene);
         ground.physicsImpostor = new PhysicsImpostor(ground, PhysicsImpostor.BoxImpostor, { mass: 0, restitution: 0.9 }, scene);
         car.isPickable = false;
 
@@ -94,10 +101,10 @@ class App {
         groundMaterial.ambientColor = new Color3(0.23, 0.98, 0.53);
         ground.material = groundMaterial;
 
-        //--GAME LOOP--
-        scene.onBeforeRenderObservable.add(() => {
+        // --GAME LOOP--
+        scene.registerAfterRender(() => {
             // suspension raycast
-            const inset = 0;
+            const inset = 0.1;
 
             let fdir = new Vector3(0,0,1);		
             fdir = this.vecToLocal(fdir, car).subtract(car.position).normalize();
@@ -109,23 +116,30 @@ class App {
             let car_bottom = car.position.add(ddir.scale(0.5))
 
             // the magic numbers are the length and width of the car / 2, fix later
-            let positions = [];
+            const positions = [];
             positions.push(car_bottom.add(fdir.scale(2 - inset)).add(rdir.scale(1.5 - inset))); // FR
             positions.push(car_bottom.add(fdir.scale(2 - inset)).subtract(rdir.scale(1.5 - inset))); // FL
             positions.push(car_bottom.subtract(fdir.scale(2 - inset)).add(rdir.scale(1.5 - inset))); // BR
             positions.push(car_bottom.subtract(fdir.scale(2 - inset)).subtract(rdir.scale(1.5 - inset))); // BL
             // suspension length
-            let length = 0.1;
+            let length = 0.5;
             positions.forEach((position) => {
                 let ray = new Ray(position, ddir, length);
-                let rayHelper = new RayHelper(ray);		
-		        rayHelper.show(scene);
+                // let rayHelper = new RayHelper(ray);
+		        // rayHelper.show(scene);
 
                 // replace with physicsengine raycast later
                 let hit = scene.pickWithRay(ray);
                 if (hit.pickedMesh) {
+                    let k = 30;
+                    let b = 15;
                     let comp_ratio = 1 - (Vector3.Distance(position, hit.pickedPoint) / length);
-                    car.physicsImpostor.applyForce(ddir.scale(-20 * comp_ratio), position);
+
+                    let vel = this.getVelocityAtWorldPoint(car, position);
+                    let force = ddir.scale(-1 * k * comp_ratio).subtract(vel.scale(b)); // F = -kx - bv
+                    car.physicsImpostor.applyForce(force, position);
+                    //console.log("Spring force: " + ddir.scale(-1 * k * comp_ratio).length() + "\nDamping: " + vel.scale(b).length());
+                    console.log(vel) // extremely low for some reason...
                 }
             });
         });
@@ -133,10 +147,18 @@ class App {
 
     // private _raycastSuspension(x, y)
 
-    private vecToLocal(vector, mesh): Vector3{
+    private vecToLocal(vector, mesh): Vector3 {
         let m = mesh.getWorldMatrix();
         let v = Vector3.TransformCoordinates(vector, m);
 		return v;		 
+    }
+
+    private getVelocityAtWorldPoint(mesh, position): Vector3 {
+        let result = new Vector3();
+        const r = position.subtract(mesh.position);
+        result = Vector3.Cross(mesh.physicsImpostor.getAngularVelocity(), r);
+        result.add(mesh.physicsImpostor.getLinearVelocity());
+        return result;
     }
 }
 new App();
