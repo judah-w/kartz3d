@@ -1,7 +1,7 @@
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
 import "@babylonjs/loaders/glTF";
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, PhysicsEngine, ShadowGenerator, DirectionalLight,  } from "@babylonjs/core";
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, PhysicsEngine, ShadowGenerator, DirectionalLight, KeyboardEventTypes,  } from "@babylonjs/core";
 import * as CANNON from 'cannon-es'
 
 
@@ -9,6 +9,7 @@ class App {
     private _scene: Scene;
     private _canvas: HTMLCanvasElement;
     private _engine: Engine;
+    private _keys: Object;
 
     constructor() {
         this._canvas = this._createCanvas();
@@ -16,6 +17,12 @@ class App {
         // initialize babylon scene and engine
         this._engine = new Engine(this._canvas, true);
         this._scene = new Scene(this._engine);
+        this._keys = {
+            "a" : false,
+            "d" : false,
+            "w" : false,
+            "s" : false
+        }
 
         const physicsPlugin = new CannonJSPlugin(true, 10, CANNON);
         
@@ -101,6 +108,69 @@ class App {
         groundMaterial.ambientColor = new Color3(0.23, 0.98, 0.53);
         ground.material = groundMaterial;
 
+        // flip button
+        window.addEventListener("keydown", (ev) => {
+            // shift
+            if (ev.shiftKey) {
+                let udir = new Vector3(0,1,0);			
+                udir = this.vecToLocal(udir, car).subtract(car.position).normalize();
+                let fdir = new Vector3(0,0,1);		
+                fdir = this.vecToLocal(fdir, car).subtract(car.position).normalize();
+                let rdir = new Vector3(1,0,0);			
+                rdir = this.vecToLocal(rdir, car).subtract(car.position).normalize();
+
+                // get random spot in car
+                let position = car.position.add(fdir.scale(this.randRange(-2, 2))).add(rdir.scale(this.randRange(-1.5, 1.5))); // FR
+
+                car.physicsImpostor.applyImpulse(udir.scale(25), position)
+            }
+        });
+
+        scene.onKeyboardObservable.add((kbInfo) => {
+            switch (kbInfo.type) {
+                case KeyboardEventTypes.KEYDOWN:
+                    switch (kbInfo.event.key) {
+                        case "a":
+                        case "A":
+                            this._keys["a"] = true;
+                        break;
+                        case "d":
+                        case "D":
+                            this._keys["d"] = true;
+                        break;
+                        case "w":
+                        case "W":
+                            this._keys["w"] = true;
+                        break;
+                        case "s":
+                        case "S":
+                            this._keys["s"] = true;
+                        break;
+                    }
+                break;
+                case KeyboardEventTypes.KEYUP:
+                    switch (kbInfo.event.key) {
+                        case "a":
+                        case "A":
+                            this._keys["a"] = false;
+                        break;
+                        case "d":
+                        case "D":
+                            this._keys["d"] = false;
+                        break;
+                        case "w":
+                        case "W":
+                            this._keys["w"] = false;
+                        break;
+                        case "s":
+                        case "S":
+                            this._keys["s"] = false;
+                        break;
+                    }
+                break;
+            }
+        });
+
         // --GAME LOOP--
         scene.registerAfterRender(() => {
             // suspension raycast
@@ -122,7 +192,7 @@ class App {
             positions.push(car_bottom.subtract(fdir.scale(2 - inset)).add(rdir.scale(1.5 - inset))); // BR
             positions.push(car_bottom.subtract(fdir.scale(2 - inset)).subtract(rdir.scale(1.5 - inset))); // BL
             // suspension length
-            let length = 0.5;
+            let length = 1;
             positions.forEach((position) => {
                 let ray = new Ray(position, ddir, length);
                 // let rayHelper = new RayHelper(ray);
@@ -131,17 +201,23 @@ class App {
                 // replace with physicsengine raycast later
                 let hit = scene.pickWithRay(ray);
                 if (hit.pickedMesh) {
-                    let k = 30;
-                    let b = 15;
+                    let k = 20;
+                    let b = 5;
                     let comp_ratio = 1 - (Vector3.Distance(position, hit.pickedPoint) / length);
 
                     let vel = this.getVelocityAtWorldPoint(car, position);
                     let force = ddir.scale(-1 * k * comp_ratio).subtract(vel.scale(b)); // F = -kx - bv
                     car.physicsImpostor.applyForce(force, position);
-                    //console.log("Spring force: " + ddir.scale(-1 * k * comp_ratio).length() + "\nDamping: " + vel.scale(b).length());
-                    console.log(vel) // extremely low for some reason...
                 }
             });
+
+            // accelerate based on keypressed, todo: align with ground
+            if (this._keys["w"]) {
+                car.physicsImpostor.applyForce(fdir.scale(50), car.position);
+            }
+            if (this._keys["s"]) {
+                car.physicsImpostor.applyForce(fdir.scale(-50), car.position);
+            }
         });
     }
 
@@ -157,8 +233,12 @@ class App {
         let result = new Vector3();
         const r = position.subtract(mesh.position);
         result = Vector3.Cross(mesh.physicsImpostor.getAngularVelocity(), r);
-        result.add(mesh.physicsImpostor.getLinearVelocity());
+        result = result.add(mesh.physicsImpostor.getLinearVelocity());
         return result;
+    }
+
+    private randRange(start, end): number {
+        return Math.floor(Math.random() * (end - start + 1) + start);
     }
 }
 new App();
