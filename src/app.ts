@@ -78,7 +78,6 @@ class App {
 
     private async _initializeGameAsync(scene, physicsPlugin): Promise<void> {
         const gravityVector = new Vector3(0, -9.81, 0);
-        // const gravityVector = new Vector3(0, 0, 0);
         scene.enablePhysics(gravityVector, physicsPlugin);
 
         // scene and camera
@@ -90,9 +89,9 @@ class App {
 
         // objects
         const car: Mesh = MeshBuilder.CreateBox("car", {height: 1, width: 3, depth: 4 }, scene);
-        car.position.y = 2;
+        car.position.y = 1;
 
-        const ground: Mesh = MeshBuilder.CreateGround("ground", {width:100, height:100});
+        const ground: Mesh = MeshBuilder.CreateGround("ground", {width:1000, height:1000});
 
         // shadows
         const shadowGenerator = new ShadowGenerator(1024, light1);
@@ -205,6 +204,9 @@ class App {
 
             // suspension length
             let length = 0.6;
+            let grounded = false;
+            let ground_fdirs = [];
+
             positions.forEach((position) => {
                 let ray = new Ray(position, ddir, length);
                 let rayHelper = new RayHelper(ray);
@@ -213,14 +215,25 @@ class App {
                 // replace with physicsengine raycast later
                 let hit = scene.pickWithRay(ray);
                 if (hit.pickedMesh) {
-                    let k = 15;
-                    let b = 2;
+                    let k = 5;
+                    let b = 1;
                     let comp_ratio = 1 - (Vector3.Distance(position, hit.pickedPoint) / length);
                     let vel = this.getVelocityAtWorldPoint(car, position);
-                    let force = ddir.scale(-1 * k * comp_ratio).subtract(vel.scale(b)); // F = -kx - bv
+                    let force = ddir.scale(-1 * k * comp_ratio).subtract(vel.scale(b).multiply(new Vector3(0, 1, 0))); // F = -kx - bv
+                    console.log(vel.scale(b))
                     car.physicsImpostor.applyForce(force, position.subtract(car.position));
+
                     normals.push(hit.getNormal());
                     comp_ratios.push(comp_ratio);
+                    grounded = true; // maybe change this logic later
+
+                    let ground_fdir = Vector3.Cross(this.getLocalDirection(new Vector3(1, 0, 0), car), hit.getNormal());
+                    ground_fdirs.push(ground_fdir);
+    
+                    let ray = new Ray(position, ground_fdir, 0.5);
+                    let rayHelper = new RayHelper(ray);
+                    rays.push(rayHelper)
+                    rayHelper.show(scene);
                 }
                 else {
                     normals.push(new Vector3());
@@ -228,39 +241,19 @@ class App {
                 }
             });
 
-            let ground_fdirs = [];
-            // get vector aligned with ground
-            // right x plane normal = forward direction... math moment
-            for (let i = 0; i < 4; i++) {
-                let ground_fdir = Vector3.Cross(this.getLocalDirection(new Vector3(1, 0, 0), car), normals.at(i));
-                ground_fdirs.push(ground_fdir);
-
-                let ray = new Ray(positions.at(i), ground_fdir, 0.5);
-                let rayHelper = new RayHelper(ray);
-                rays.push(rayHelper)
-		        rayHelper.show(scene);
-            }
-
             // accelerate based on keypressed, todo: align with ground
             if (this._keys["w"]) {
-                let force = new Vector3()
-                for (let i = 0; i < 4; i++) {
-                    // apply force per wheel, applied to car center for now
-                    // 80 x comp_ratio per wheel
-                    force = force.add(ground_fdirs.at(i).scale(140 * comp_ratios.at(i)));
+                if (grounded) {
+                    let force = ground_fdirs.at(0).scale(30);
+                    // car.physicsImpostor.applyForce(force, new Vector3(0, -0.4, -0.2));
+                    car.physicsImpostor.applyForce(force, new Vector3(0, -0.1, 0));
                 }
-                // apply below car center
-                car.physicsImpostor.applyForce(force, new Vector3(0, -0.4, 0));
             }
             if (this._keys["s"]) {
-                let force = new Vector3()
-                for (let i = 0; i < 4; i++) {
-                    // apply force per wheel, applied to car center for now
-                    // 80 x comp_ratio per wheel
-                    force = force.add(ground_fdirs.at(i).scale(-40 * comp_ratios.at(i)));
+                if (grounded) {
+                    let force = ground_fdirs.at(0).scale(-10);
+                    car.physicsImpostor.applyForce(force, new Vector3(0, -0.1, 0));
                 }
-                // apply below car center
-                car.physicsImpostor.applyForce(force, new Vector3(0, -0.4, 0));
             }
             if (this._keys["d"]) {
                 car.physicsImpostor.physicsBody.applyTorque(new Vector3(0, 10, 0));
@@ -281,7 +274,7 @@ class App {
                 car.physicsImpostor.applyImpulse(new Vector3(0,3,0), position)
             }
             if (this._keys["r"]) {
-                car.setAbsolutePosition(new Vector3(0, 2, 0));
+                car.setAbsolutePosition(new Vector3(0, 1, 0));
                 car.rotationQuaternion = new Quaternion();
                 car.physicsImpostor.setAngularVelocity(new Vector3());
                 car.physicsImpostor.setLinearVelocity(new Vector3());
