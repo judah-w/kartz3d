@@ -78,6 +78,7 @@ class App {
 
     private async _initializeGameAsync(scene, physicsPlugin): Promise<void> {
         const gravityVector = new Vector3(0, -9.81, 0);
+        // const gravityVector = new Vector3(0, 0, 0);
         scene.enablePhysics(gravityVector, physicsPlugin);
 
         // scene and camera
@@ -203,7 +204,7 @@ class App {
             }
 
             // suspension length
-            let length = 0.4;
+            let length = 0.6;
             positions.forEach((position) => {
                 let ray = new Ray(position, ddir, length);
                 let rayHelper = new RayHelper(ray);
@@ -212,8 +213,8 @@ class App {
                 // replace with physicsengine raycast later
                 let hit = scene.pickWithRay(ray);
                 if (hit.pickedMesh) {
-                    let k = 5;
-                    let b = 1;
+                    let k = 15;
+                    let b = 2;
                     let comp_ratio = 1 - (Vector3.Distance(position, hit.pickedPoint) / length);
                     let vel = this.getVelocityAtWorldPoint(car, position);
                     let force = ddir.scale(-1 * k * comp_ratio).subtract(vel.scale(b)); // F = -kx - bv
@@ -229,7 +230,7 @@ class App {
 
             let ground_fdirs = [];
             // get vector aligned with ground
-            // right x plane normal = forward... maybe?
+            // right x plane normal = forward direction... math moment
             for (let i = 0; i < 4; i++) {
                 let ground_fdir = Vector3.Cross(this.getLocalDirection(new Vector3(1, 0, 0), car), normals.at(i));
                 ground_fdirs.push(ground_fdir);
@@ -242,24 +243,30 @@ class App {
 
             // accelerate based on keypressed, todo: align with ground
             if (this._keys["w"]) {
-                for (let i = 0; i < 1; i++) {
+                let force = new Vector3()
+                for (let i = 0; i < 4; i++) {
                     // apply force per wheel, applied to car center for now
-                    // 50 x comp_ratio per wheel
-                    car.physicsImpostor.applyForce(
-                        ground_fdirs.at(i).scale(50 * comp_ratios.at(i)),
-                                    // apply slightly below car middle
-                        Vector3.Zero() //.add(this.getLocalDirection(new Vector3(0, 0, -0.25), car))
-                    );
+                    // 80 x comp_ratio per wheel
+                    force = force.add(ground_fdirs.at(i).scale(140 * comp_ratios.at(i)));
                 }
+                // apply below car center
+                car.physicsImpostor.applyForce(force, new Vector3(0, -0.4, 0));
             }
             if (this._keys["s"]) {
-                car.physicsImpostor.applyForce(fdir.scale(-50), Vector3.Zero());
+                let force = new Vector3()
+                for (let i = 0; i < 4; i++) {
+                    // apply force per wheel, applied to car center for now
+                    // 80 x comp_ratio per wheel
+                    force = force.add(ground_fdirs.at(i).scale(-40 * comp_ratios.at(i)));
+                }
+                // apply below car center
+                car.physicsImpostor.applyForce(force, new Vector3(0, -0.4, 0));
             }
             if (this._keys["d"]) {
-                car.physicsImpostor.physicsBody.applyTorque(new Vector3(0, 100, 0));
+                car.physicsImpostor.physicsBody.applyTorque(new Vector3(0, 10, 0));
             }
             if (this._keys["a"]) {
-                car.physicsImpostor.physicsBody.applyTorque(new Vector3(0, -100, 0));
+                car.physicsImpostor.physicsBody.applyTorque(new Vector3(0, -10, 0));
             }
 
             // flip
@@ -270,8 +277,8 @@ class App {
                 rdir = this.vecToLocal(rdir, car).subtract(car.position).normalize();
 
                 // get random spot in car
-                let position = car.position.add(fdir.scale(this.randRange(-2, 2))).add(rdir.scale(this.randRange(-1.5, 1.5)));
-                car.physicsImpostor.applyImpulse(new Vector3(0,5,0), position)
+                let position = fdir.scale(this.randRange(-2, 2)).add(rdir.scale(this.randRange(-1.5, 1.5)));
+                car.physicsImpostor.applyImpulse(new Vector3(0,3,0), position)
             }
             if (this._keys["r"]) {
                 car.setAbsolutePosition(new Vector3(0, 2, 0));
