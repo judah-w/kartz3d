@@ -1,7 +1,7 @@
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
 import "@babylonjs/loaders/glTF";
-import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, PhysicsEngine, ShadowGenerator, DirectionalLight, KeyboardEventTypes,  } from "@babylonjs/core";
+import { Engine, Scene, ArcRotateCamera, Vector3, HemisphericLight, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, PhysicsEngine, ShadowGenerator, DirectionalLight, KeyboardEventTypes, Quaternion,  } from "@babylonjs/core";
 import * as CANNON from 'cannon-es'
 
 
@@ -21,7 +21,9 @@ class App {
             "a" : false,
             "d" : false,
             "w" : false,
-            "s" : false
+            "s" : false,
+            "f" : false,
+            "r" : false
         }
 
         const physicsPlugin = new CannonJSPlugin(true, 10, CANNON);
@@ -75,7 +77,7 @@ class App {
     }
 
     private async _initializeGameAsync(scene, physicsPlugin): Promise<void> {
-        const gravityVector = new Vector3(0,-9.81, 0);
+        const gravityVector = new Vector3(0, -9.81, 0);
         scene.enablePhysics(gravityVector, physicsPlugin);
 
         // scene and camera
@@ -88,6 +90,7 @@ class App {
         // objects
         const car: Mesh = MeshBuilder.CreateBox("car", {height: 1, width: 3, depth: 4 }, scene);
         car.position.y = 2;
+
         const ground: Mesh = MeshBuilder.CreateGround("ground", {width:100, height:100});
 
         // shadows
@@ -96,7 +99,7 @@ class App {
         ground.receiveShadows = true;
 
         // physics properties
-        car.physicsImpostor = new PhysicsImpostor(car, PhysicsImpostor.BoxImpostor, { mass: 5, restitution: 0.5 }, scene);
+        car.physicsImpostor = new PhysicsImpostor(car, PhysicsImpostor.BoxImpostor, { mass: 1, restitution: 0 }, scene);
         ground.physicsImpostor = new PhysicsImpostor(ground, PhysicsImpostor.BoxImpostor, { mass: 0, restitution: 0.9 }, scene);
         car.isPickable = false;
 
@@ -107,24 +110,6 @@ class App {
         groundMaterial.emissiveColor = new Color3(0.3, 0.5, 0.2);
         groundMaterial.ambientColor = new Color3(0.23, 0.98, 0.53);
         ground.material = groundMaterial;
-
-        // flip button
-        window.addEventListener("keydown", (ev) => {
-            // shift
-            if (ev.shiftKey) {
-                let udir = new Vector3(0,1,0);			
-                udir = this.vecToLocal(udir, car).subtract(car.position).normalize();
-                let fdir = new Vector3(0,0,1);		
-                fdir = this.vecToLocal(fdir, car).subtract(car.position).normalize();
-                let rdir = new Vector3(1,0,0);			
-                rdir = this.vecToLocal(rdir, car).subtract(car.position).normalize();
-
-                // get random spot in car
-                let position = car.position.add(fdir.scale(this.randRange(-2, 2))).add(rdir.scale(this.randRange(-1.5, 1.5))); // FR
-
-                car.physicsImpostor.applyImpulse(udir.scale(25), position)
-            }
-        });
 
         scene.onKeyboardObservable.add((kbInfo) => {
             switch (kbInfo.type) {
@@ -146,6 +131,14 @@ class App {
                         case "S":
                             this._keys["s"] = true;
                         break;
+                        case "f":
+                        case "F":
+                            this._keys["f"] = true;
+                        break;
+                        case "r":
+                        case "R":
+                            this._keys["r"] = true;
+                        break;
                     }
                 break;
                 case KeyboardEventTypes.KEYUP:
@@ -166,22 +159,29 @@ class App {
                         case "S":
                             this._keys["s"] = false;
                         break;
+                        case "f":
+                        case "F":
+                            this._keys["f"] = false;
+                        break;
+                        case "r":
+                        case "R":
+                            this._keys["r"] = false;
+                        break;
                     }
                 break;
             }
         });
 
         // --GAME LOOP--
+        const rays = []
+        let go = true;
         scene.registerAfterRender(() => {
             // suspension raycast
-            const inset = 0.1;
+            const inset = 0.2;
 
-            let fdir = new Vector3(0,0,1);		
-            fdir = this.vecToLocal(fdir, car).subtract(car.position).normalize();
-            let rdir = new Vector3(1,0,0);			
-            rdir = this.vecToLocal(rdir, car).subtract(car.position).normalize();
-            let ddir = new Vector3(0,-1,0);			
-            ddir = this.vecToLocal(ddir, car).subtract(car.position).normalize();
+            let fdir = this.getLocalDirection(new Vector3(0, 0, 1), car);
+            let rdir = this.getLocalDirection(new Vector3(1, 0, 0), car);
+            let ddir = this.getLocalDirection(new Vector3(0, -1, 0), car);
 
             let car_bottom = car.position.add(ddir.scale(0.5))
 
@@ -191,32 +191,93 @@ class App {
             positions.push(car_bottom.add(fdir.scale(2 - inset)).subtract(rdir.scale(1.5 - inset))); // FL
             positions.push(car_bottom.subtract(fdir.scale(2 - inset)).add(rdir.scale(1.5 - inset))); // BR
             positions.push(car_bottom.subtract(fdir.scale(2 - inset)).subtract(rdir.scale(1.5 - inset))); // BL
+
+            const normals = [];
+            const comp_ratios = [];
+
+            rays.forEach((ray) => { 
+                ray.hide(scene);
+            });
+            for (let i = 0; i < rays.length; i++) {
+                rays.pop();
+            }
+
             // suspension length
-            let length = 1;
+            let length = 0.4;
             positions.forEach((position) => {
                 let ray = new Ray(position, ddir, length);
-                // let rayHelper = new RayHelper(ray);
-		        // rayHelper.show(scene);
-
+                let rayHelper = new RayHelper(ray);
+                rays.push(rayHelper)
+		        rayHelper.show(scene);
                 // replace with physicsengine raycast later
                 let hit = scene.pickWithRay(ray);
                 if (hit.pickedMesh) {
-                    let k = 20;
-                    let b = 5;
+                    let k = 5;
+                    let b = 1;
                     let comp_ratio = 1 - (Vector3.Distance(position, hit.pickedPoint) / length);
-
                     let vel = this.getVelocityAtWorldPoint(car, position);
                     let force = ddir.scale(-1 * k * comp_ratio).subtract(vel.scale(b)); // F = -kx - bv
-                    car.physicsImpostor.applyForce(force, position);
+                    car.physicsImpostor.applyForce(force, position.subtract(car.position));
+                    normals.push(hit.getNormal());
+                    comp_ratios.push(comp_ratio);
+                }
+                else {
+                    normals.push(new Vector3());
+                    comp_ratios.push(0);
                 }
             });
 
+            let ground_fdirs = [];
+            // get vector aligned with ground
+            // right x plane normal = forward... maybe?
+            for (let i = 0; i < 4; i++) {
+                let ground_fdir = Vector3.Cross(this.getLocalDirection(new Vector3(1, 0, 0), car), normals.at(i));
+                ground_fdirs.push(ground_fdir);
+
+                let ray = new Ray(positions.at(i), ground_fdir, 0.5);
+                let rayHelper = new RayHelper(ray);
+                rays.push(rayHelper)
+		        rayHelper.show(scene);
+            }
+
             // accelerate based on keypressed, todo: align with ground
             if (this._keys["w"]) {
-                car.physicsImpostor.applyForce(fdir.scale(50), car.position);
+                for (let i = 0; i < 1; i++) {
+                    // apply force per wheel, applied to car center for now
+                    // 50 x comp_ratio per wheel
+                    car.physicsImpostor.applyForce(
+                        ground_fdirs.at(i).scale(50 * comp_ratios.at(i)),
+                                    // apply slightly below car middle
+                        Vector3.Zero() //.add(this.getLocalDirection(new Vector3(0, 0, -0.25), car))
+                    );
+                }
             }
             if (this._keys["s"]) {
-                car.physicsImpostor.applyForce(fdir.scale(-50), car.position);
+                car.physicsImpostor.applyForce(fdir.scale(-50), Vector3.Zero());
+            }
+            if (this._keys["d"]) {
+                car.physicsImpostor.physicsBody.applyTorque(new Vector3(0, 100, 0));
+            }
+            if (this._keys["a"]) {
+                car.physicsImpostor.physicsBody.applyTorque(new Vector3(0, -100, 0));
+            }
+
+            // flip
+            if (this._keys["f"]) {
+                let fdir = new Vector3(0,0,1);		
+                fdir = this.vecToLocal(fdir, car).subtract(car.position).normalize();
+                let rdir = new Vector3(1,0,0);			
+                rdir = this.vecToLocal(rdir, car).subtract(car.position).normalize();
+
+                // get random spot in car
+                let position = car.position.add(fdir.scale(this.randRange(-2, 2))).add(rdir.scale(this.randRange(-1.5, 1.5)));
+                car.physicsImpostor.applyImpulse(new Vector3(0,5,0), position)
+            }
+            if (this._keys["r"]) {
+                car.setAbsolutePosition(new Vector3(0, 2, 0));
+                car.rotationQuaternion = new Quaternion();
+                car.physicsImpostor.setAngularVelocity(new Vector3());
+                car.physicsImpostor.setLinearVelocity(new Vector3());
             }
         });
     }
@@ -229,12 +290,16 @@ class App {
 		return v;		 
     }
 
+    private getLocalDirection(vector, mesh): Vector3 {	
+        return this.vecToLocal(vector, mesh).subtract(mesh.position).normalize();
+    }
+
+    // point_vel = mesh_vel + (mesh_angular_vel x (pos - mesh_pos))
     private getVelocityAtWorldPoint(mesh, position): Vector3 {
         let result = new Vector3();
         const r = position.subtract(mesh.position);
         result = Vector3.Cross(mesh.physicsImpostor.getAngularVelocity(), r);
-        result = result.add(mesh.physicsImpostor.getLinearVelocity());
-        return result;
+        return result.add(mesh.physicsImpostor.getLinearVelocity());
     }
 
     private randRange(start, end): number {
