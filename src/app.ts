@@ -1,8 +1,10 @@
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
 import "@babylonjs/loaders/glTF";
-import { Engine, Scene, Vector3, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, ShadowGenerator, DirectionalLight, KeyboardEventTypes, Quaternion, ArcFollowCamera, Texture, SceneLoader, GroundMesh, CubeTexture, HemisphericLight,  } from "@babylonjs/core";
+import { Engine, Scene, Vector3, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, ShadowGenerator, DirectionalLight, KeyboardEventTypes, Quaternion, ArcFollowCamera, Texture, SceneLoader, GroundMesh, CubeTexture, HemisphericLight, VertexBuffer, VertexData,  } from "@babylonjs/core";
 import * as CANNON from 'cannon-es'
+import 'babylonjs-loaders'
+import { OBJFileLoader } from "babylonjs-loaders";
 
 
 class App {
@@ -91,11 +93,10 @@ class App {
 
         // load the car
         this.loadCarMesh(car);
-    
-        // scene.createDefaultEnvironment()
+        this.loadTrackMesh(ground);
 
         // scene and camera
-        const camera: ArcFollowCamera = new ArcFollowCamera("camera", -Math.PI / 2, Math.PI / 6, 50, car, scene);
+        const camera: ArcFollowCamera = new ArcFollowCamera("camera", -Math.PI / 2, Math.PI / 6, 30, car, scene);
         camera.attachControl(this._canvas, true);
 
         const light1: HemisphericLight = new HemisphericLight("light1", new Vector3(0, 1, 0), scene);
@@ -128,6 +129,7 @@ class App {
 	    groundMaterial.emissiveTexture = texture;
 	    groundMaterial.ambientTexture = texture;
         ground.material = groundMaterial;
+        // ground.isVisible = false;
 
         scene.onKeyboardObservable.add((kbInfo) => {
             switch (kbInfo.type) {
@@ -208,9 +210,6 @@ class App {
             positions.push(car_bottom.subtract(fdir.scale(car_length / 2 - inset)).add(rdir.scale(car_width / 2 - inset))); // BR
             positions.push(car_bottom.subtract(fdir.scale(car_length / 2 - inset)).subtract(rdir.scale(car_width / 2 - inset))); // BL
 
-            const normals = [];
-            const comp_ratios = [];
-
             rays.forEach((ray) => { 
                 ray.hide(scene);
             });
@@ -219,7 +218,7 @@ class App {
             }
 
             // suspension length
-            let length = 0.6;
+            let length = 1;
             let grounded = false;
             let ground_fdirs = [];
 
@@ -231,30 +230,22 @@ class App {
                 // replace with physicsengine raycast later
                 let hit = scene.pickWithRay(ray);
 
-
                 if (hit.pickedMesh) {
-                    let k = 5;
+                    let k = 15;
                     let b = 1;
                     let comp_ratio = 1 - (Vector3.Distance(position, hit.pickedPoint) / length);
                     let vel = this.getVelocityAtWorldPoint(car, position);
                     let force = ddir.scale(-1 * k * comp_ratio).subtract(vel.scale(b).multiply(new Vector3(0, 1, 0))); // F = -kx - bv
                     car.physicsImpostor.applyForce(force, position.subtract(car.position));
 
-                    normals.push(hit.getNormal());
-                    comp_ratios.push(comp_ratio);
                     grounded = true; // maybe change this logic later
-
-                    let ground_fdir = Vector3.Cross(this.getLocalDirection(new Vector3(1, 0, 0), car), hit.getNormal());
+                    let ground_fdir = Vector3.Cross(this.getLocalDirection(new Vector3(1, 0, 0), car), hit.getNormal(false, true));
                     ground_fdirs.push(ground_fdir);
     
                     let ray = new Ray(position, ground_fdir, 0.5);
                     let rayHelper = new RayHelper(ray);
                     rays.push(rayHelper)
                     rayHelper.show(scene);
-                }
-                else {
-                    normals.push(new Vector3());
-                    comp_ratios.push(0);
                 }
             });
 
@@ -300,8 +291,7 @@ class App {
     }    
     
     public async loadCarMesh(outer) {
-        // OBJFileLoader.OPTIMIZE_WITH_UV = true;
-        SceneLoader.ImportMeshAsync("", 
+        SceneLoader.ImportMeshAsync("Low Poly Rx7", 
             '/assets/karts/rx7/',
             'scene.gltf',
             this._scene
@@ -317,6 +307,35 @@ class App {
             body.scaling = new Vector3(0.01, 0.01, 0.01);
             body.rotation = new Vector3(0, Math.PI / 2, 0);
             body.position = new Vector3(0, -0.6, 0);
+        });
+    }
+
+    public async loadTrackMesh(outer) {
+        SceneLoader.ImportMeshAsync("", 
+            '/assets/tracks/',
+            'Peach Gardens.glb',
+            this._scene
+        ).then((result) => {
+            const root = result.meshes[0];
+            //body is our actual player mesh
+            const body = root;
+            body.parent = outer;
+            body.isPickable = false;
+            body.getChildMeshes().forEach(m => {
+                // m.isPickable = false;
+                let normals = [];
+                let positions = m.getVerticesData(VertexBuffer.PositionKind);
+                console.log(positions)
+
+                VertexData.ComputeNormals(positions, m.getIndices(), normals, {useRightHandedSystem: true});
+                m.setVerticesData(VertexBuffer.NormalKind, normals);
+            })
+            body.scaling = new Vector3(1.2, 1.2, 1.2);
+            body.rotation = new Vector3(0, 0, 0);
+            // body.position = new Vector3(20, -15, -75); // wario stadium
+            body.position = new Vector3(170, -71.9, 0); // wario stadium
+
+
         });
     }
 
