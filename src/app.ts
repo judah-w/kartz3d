@@ -1,17 +1,20 @@
 import "@babylonjs/core/Debug/debugLayer";
 import "@babylonjs/inspector";
 import "@babylonjs/loaders/glTF";
-import { Engine, Scene, Vector3, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, ShadowGenerator, DirectionalLight, KeyboardEventTypes, Quaternion, ArcFollowCamera, Texture, SceneLoader, GroundMesh, CubeTexture, HemisphericLight, VertexBuffer, VertexData,  } from "@babylonjs/core";
+import { Engine, Scene, Vector3, Mesh, MeshBuilder, CannonJSPlugin, PhysicsImpostor, StandardMaterial, Color3, Ray, RayHelper, ShadowGenerator, DirectionalLight, KeyboardEventTypes, Quaternion, ArcFollowCamera, Texture, SceneLoader, GroundMesh, CubeTexture, HemisphericLight, VertexBuffer, VertexData, KeyboardInfo,  } from "@babylonjs/core";
 import * as CANNON from 'cannon-es'
 import 'babylonjs-loaders'
 import { OBJFileLoader } from "babylonjs-loaders";
 
+interface Keys {
+    [key: string]: boolean;
+}
 
 class App {
     private _scene: Scene;
     private _canvas: HTMLCanvasElement;
     private _engine: Engine;
-    private _keys: Object;
+    private _keys: Keys;
 
     constructor() {
         this._canvas = this._createCanvas();
@@ -19,17 +22,10 @@ class App {
         // initialize babylon scene and engine
         this._engine = new Engine(this._canvas, true);
         this._scene = new Scene(this._engine);
-        this._keys = {
-            "a" : false,
-            "d" : false,
-            "w" : false,
-            "s" : false,
-            "f" : false,
-            "r" : false
-        }
+        this._keys = {}
 
         const physicsPlugin = new CannonJSPlugin(true, 10, CANNON);
-        
+
         // hide/show the Inspector
         window.addEventListener("keydown", (ev) => {
             // Shift+Ctrl+Alt+I
@@ -131,65 +127,11 @@ class App {
         ground.material = groundMaterial;
         // ground.isVisible = false;
 
-        scene.onKeyboardObservable.add((kbInfo) => {
-            switch (kbInfo.type) {
-                case KeyboardEventTypes.KEYDOWN:
-                    switch (kbInfo.event.key) {
-                        case "a":
-                        case "A":
-                            this._keys["a"] = true;
-                        break;
-                        case "d":
-                        case "D":
-                            this._keys["d"] = true;
-                        break;
-                        case "w":
-                        case "W":
-                            this._keys["w"] = true;
-                        break;
-                        case "s":
-                        case "S":
-                            this._keys["s"] = true;
-                        break;
-                        case "f":
-                        case "F":
-                            this._keys["f"] = true;
-                        break;
-                        case "r":
-                        case "R":
-                            this._keys["r"] = true;
-                        break;
-                    }
-                break;
-                case KeyboardEventTypes.KEYUP:
-                    switch (kbInfo.event.key) {
-                        case "a":
-                        case "A":
-                            this._keys["a"] = false;
-                        break;
-                        case "d":
-                        case "D":
-                            this._keys["d"] = false;
-                        break;
-                        case "w":
-                        case "W":
-                            this._keys["w"] = false;
-                        break;
-                        case "s":
-                        case "S":
-                            this._keys["s"] = false;
-                        break;
-                        case "f":
-                        case "F":
-                            this._keys["f"] = false;
-                        break;
-                        case "r":
-                        case "R":
-                            this._keys["r"] = false;
-                        break;
-                    }
-                break;
-            }
+        scene.onKeyboardObservable.add((kbInfo: KeyboardInfo) => {
+            if (kbInfo.type === KeyboardEventTypes.KEYDOWN)
+                this._keys[kbInfo.event.key.toLowerCase()] = true;
+             else if (kbInfo.type === KeyboardEventTypes.KEYUP)
+                this._keys[kbInfo.event.key.toLowerCase()] = false;
         });
 
         // --GAME LOOP--
@@ -210,7 +152,7 @@ class App {
             positions.push(car_bottom.subtract(fdir.scale(car_length / 2 - inset)).add(rdir.scale(car_width / 2 - inset))); // BR
             positions.push(car_bottom.subtract(fdir.scale(car_length / 2 - inset)).subtract(rdir.scale(car_width / 2 - inset))); // BL
 
-            rays.forEach((ray) => { 
+            rays.forEach((ray) => {
                 ray.hide(scene);
             });
             for (let i = 0; i < rays.length; i++) {
@@ -241,7 +183,7 @@ class App {
                     grounded = true; // maybe change this logic later
                     let ground_fdir = Vector3.Cross(this.getLocalDirection(new Vector3(1, 0, 0), car), hit.getNormal(false, true));
                     ground_fdirs.push(ground_fdir);
-    
+
                     let ray = new Ray(position, ground_fdir, 0.5);
                     let rayHelper = new RayHelper(ray);
                     rays.push(rayHelper)
@@ -272,9 +214,9 @@ class App {
 
             // flip
             if (this._keys["f"]) {
-                let fdir = new Vector3(0,0,1);		
+                let fdir = new Vector3(0,0,1);
                 fdir = this.vecToLocal(fdir, car).subtract(car.position).normalize();
-                let rdir = new Vector3(1,0,0);			
+                let rdir = new Vector3(1,0,0);
                 rdir = this.vecToLocal(rdir, car).subtract(car.position).normalize();
 
                 // get random spot in car
@@ -288,10 +230,10 @@ class App {
                 car.physicsImpostor.setLinearVelocity(new Vector3());
             }
         });
-    }    
-    
+    }
+
     public async loadCarMesh(outer) {
-        SceneLoader.ImportMeshAsync("Low Poly Rx7", 
+        SceneLoader.ImportMeshAsync("Low Poly Rx7",
             '/assets/karts/rx7/',
             'scene.gltf',
             this._scene
@@ -311,57 +253,56 @@ class App {
     }
 
     public async loadTrackMesh(outer) {
-        SceneLoader.ImportMeshAsync("", 
+        const importResult = await SceneLoader.ImportMeshAsync("",
             '/assets/tracks/',
             'Peach Gardens.glb',
             this._scene
-        ).then((result) => {
-            const root = result.meshes[0];
-            //body is our actual player mesh
-            const body = root;
-            body.parent = outer;
-            body.isPickable = false;
-            body.getChildMeshes().forEach(m => {
-                // m.isPickable = false;
-                let normals = [];
-                let positions = m.getVerticesData(VertexBuffer.PositionKind);
-                console.log(positions)
+        );
 
-                VertexData.ComputeNormals(positions, m.getIndices(), normals, {useRightHandedSystem: true});
-                m.setVerticesData(VertexBuffer.NormalKind, normals);
-            })
-            body.scaling = new Vector3(1.2, 1.2, 1.2);
-            body.rotation = new Vector3(0, 0, 0);
-            // body.position = new Vector3(20, -15, -75); // wario stadium
-            body.position = new Vector3(170, -71.9, 0); // wario stadium
+        const root = importResult.meshes[0];
+        //body is our actual player mesh
+        const body = root;
+        body.parent = outer;
+        body.isPickable = false;
+        body.getChildMeshes().forEach(m => {
+            // m.isPickable = false;
+            let normals = [];
+            let positions = m.getVerticesData(VertexBuffer.PositionKind);
+            console.log(positions)
 
-
-        });
+            VertexData.ComputeNormals(positions, m.getIndices(), normals, {useRightHandedSystem: true});
+            m.setVerticesData(VertexBuffer.NormalKind, normals);
+        })
+        body.scaling = new Vector3(1.2, 1.2, 1.2);
+        body.rotation = new Vector3(0, 0, 0);
+        // body.position = new Vector3(20, -15, -75); // wario stadium
+        body.position = new Vector3(170, -71.9, 0); // wario stadium
     }
 
     // helpers
     // private _raycastSuspension(x, y)
 
-    private vecToLocal(vector, mesh): Vector3 {
+    private vecToLocal(vector: Vector3, mesh: Mesh): Vector3 {
         let m = mesh.getWorldMatrix();
         let v = Vector3.TransformCoordinates(vector, m);
-		return v;		 
+		return v;
     }
 
-    private getLocalDirection(vector, mesh): Vector3 {	
+    private getLocalDirection(vector: Vector3, mesh: Mesh): Vector3 {
         return this.vecToLocal(vector, mesh).subtract(mesh.position).normalize();
     }
 
     // point_vel = mesh_vel + (mesh_angular_vel x (pos - mesh_pos))
-    private getVelocityAtWorldPoint(mesh, position): Vector3 {
+    private getVelocityAtWorldPoint(mesh: Mesh, position: Vector3): Vector3 {
         let result = new Vector3();
         const r = position.subtract(mesh.position);
         result = Vector3.Cross(mesh.physicsImpostor.getAngularVelocity(), r);
         return result.add(mesh.physicsImpostor.getLinearVelocity());
     }
 
-    private randRange(start, end): number {
+    private randRange(start: number, end: number): number {
         return Math.floor(Math.random() * (end - start + 1) + start);
     }
 }
+
 new App();
